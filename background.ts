@@ -1,45 +1,45 @@
 import { Storage } from "@plasmohq/storage"
 
-const storage = new Storage()
-
 type Logs = {
   url: string
-  pageUrl:string
+  pageUrl: string
   title: string
+  initiator: string
   favicon: string
   timeStamp: number
 }
 
-const getLogs = async () => {
-  return ((await storage.get("request_logs")) as Logs[]) || []
-}
-
 const saveLog = async (details: chrome.webRequest.WebRequestBodyDetails) => {
-  const logs = await getLogs()
+  // if (/https:\/\/[^\s'"]*?\.(vtt|m3u8)/gm.test(details.url)) {
+  //   console.log(details)
+  // }
+  if (/https:\/\/[^\s'"]*?\.m3u8/gm.test(details.url)) {
+    const storage = new Storage()
+    const logs = ((await storage.get("request_logs")) as Logs[]) || []
 
-  const [tab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, resolve)
-  })
+    const [tab] = await new Promise<chrome.tabs.Tab[]>((resolve) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, resolve)
+    })
+    const log = {
+      url: details.url,
+      pageUrl: tab?.url || "N/A",
+      initiator: details.initiator,
+      title: tab?.title || "N/A",
+      favicon: tab?.favIconUrl || null,
+      timeStamp: details.timeStamp
+    } satisfies Logs
 
-  logs.push({
-    url: details.url,
-    pageUrl: tab?.url || "N/A",
-    title: tab?.title || "N/A",
-    favicon: tab?.favIconUrl || "",
-    timeStamp: details.timeStamp
-  })
+    logs.push(log)
 
-  if (logs.length > 10) logs.shift()
+    if (logs.length > 10) logs.shift()
 
-  await storage.set("request_logs", logs)
+    await storage.set("request_logs", logs)
+  }
 }
 
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
-    if (/\/master.m3u8(\?|$)/.test(details.url) && details.method === "GET") {
-      console.log(details)
-      saveLog(details).then(console.log).catch(console.error)
-    }
+    saveLog(details).catch(console.error)
   },
   {
     urls: ["*://*/*"],

@@ -20,12 +20,30 @@ function Popup() {
   const [currentTabUrl, setCurrentTabUrl] = useState("")
 
   useEffect(() => {
+    // Initial load
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       setCurrentTabUrl(tabs[0]?.url || "")
     })
-    storage.get<Logs[]>("request_logs").then((data) => {
-      setLogs(data || [])
-    })
+
+    const fetchLogs = () => {
+      storage.get<Logs[]>("request_logs").then((data) => {
+        setLogs(data || [])
+      })
+    }
+
+    fetchLogs()
+
+    const logWatcher = () => {
+      fetchLogs()
+    }
+
+    // Start watching
+    storage.watch({ request_logs: logWatcher })
+
+    // Cleanup
+    return () => {
+      storage.unwatch({ request_logs: logWatcher })
+    }
   }, [currentTabUrl])
 
   const Clear = () => {
@@ -53,39 +71,49 @@ function Popup() {
         </button>
       </div>
       <ul className="mt-2 space-y-4 max-h-64 overflow-auto text-xs">
-        {logs.map((log, i) => {
-          const isCurrent = log.pageUrl === currentTabUrl
+        {logs.
+          sort((a, b) => a.timeStamp > b.timeStamp ? -1 : 1)
+          .map((log, i) => {
+            const isCurrent = log.pageUrl === currentTabUrl
 
-          return (
-            <div
-              key={i}
-              onClick={async () => {
-                await navigator.clipboard.writeText(log.url)
-                setCopied(log.url)
-              }}
-              className="flex gap-4 justify-between hover:bg-black/20 rounded-md p-2">
-              <div className="flex gap-3">
-                <img
-                  src={log.favicon}
-                  alt="favicon"
-                  className="size-[50px] rounded-md"
-                />
-                <div className="space-y-1">
-                  <h3 className="line-clamp-1 text-xs text-wrap w-[70%]">{log.title}</h3>
-                  <p>{new Date(log.timeStamp).toLocaleString()}</p>
-                </div>
-              </div>
-              {<button
-                disabled={copied === log.url}
+            return (
+              <div
+                key={i}
                 onClick={async () => {
                   await navigator.clipboard.writeText(log.url)
                   setCopied(log.url)
                 }}
-                className="disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1 rounded-full disabled:bg-green-800 disabled:text-green-300 text-nowrap bg-black/20 h-fit"
-              >{copied === log.url ? "Copied" : isCurrent ? "Current" : "Copy URL"}</button>}
-            </div>
-          )
-        })}
+                className="flex gap-4 justify-between hover:bg-black/20 rounded-md p-2">
+                <div className="flex gap-3">
+                  <img
+                    src={log.favicon}
+                    alt="favicon"
+                    className="size-[50px] rounded-md"
+                  />
+                  <div className="space-y-1">
+                    <h3 className="line-clamp-1 text-xs text-wrap w-[70%]">{log.title}</h3>
+                    <p>{new Date(log.timeStamp).toLocaleString(undefined, {
+                      hour: 'numeric',
+                      minute: 'numeric',
+                      second: 'numeric',
+                      hour12: true,
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}</p>
+                  </div>
+                </div>
+                {<button
+                  disabled={copied === log.url}
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(log.url)
+                    setCopied(log.url)
+                  }}
+                  className="disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1 rounded-full disabled:bg-green-800 disabled:text-green-300 text-nowrap bg-black/20 h-fit"
+                >{copied === log.url ? "Copied" : isCurrent ? "Current" : "Copy URL"}</button>}
+              </div>
+            )
+          })}
       </ul>
     </div>
   )
